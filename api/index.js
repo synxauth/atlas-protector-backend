@@ -1,42 +1,51 @@
-import fs from 'fs';
-import path from 'path';
-
 export default async function handler(req, res) {
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
-
-  const buildId = req.query.build_id;
-  let payload;
-
   if (req.method === 'POST') {
     try {
-      payload = req.body.payload;
-    } catch {
+      const body = await readBody(req);
+      const { build_id, payload } = JSON.parse(body);
+
+      if (!build_id || typeof build_id !== 'string') {
+        return res.status(400).json({ error: 'Invalid or missing build_id' });
+      }
+
+      if (!payload) {
+        return res.status(400).json({ error: 'Missing payload' });
+      }
+
+      // TEMP STORAGE (not persistent!)
+      globalThis._payloads = globalThis._payloads || {};
+      globalThis._payloads[build_id] = payload;
+
+      return res.status(200).json({ success: 'Payload saved (temporary storage)' });
+
+    } catch (err) {
       return res.status(400).json({ error: 'Invalid JSON payload' });
     }
   }
 
-  if (!buildId || !/^[a-zA-Z0-9]+$/.test(buildId)) {
-    return res.status(400).json({ error: 'Invalid or missing build_id' });
-  }
-
-  // Warning: Vercel functions have ephemeral storage
-  const filePath = path.join('/tmp', `${buildId}.txt`);
-
-  try {
-    if (payload !== undefined) {
-      // Save payload temporarily
-      fs.writeFileSync(filePath, payload);
-      return res.status(200).json({ success: 'Payload saved (temporary storage)' });
-    } else {
-      if (!fs.existsSync(filePath)) {
-        return res.status(404).json({ error: 'No payload found' });
-      }
-      const data = fs.readFileSync(filePath, 'utf-8');
-      return res.status(200).send(data);
+  if (req.method === 'GET') {
+    const build_id = req.query.build_id;
+    if (!build_id) {
+      return res.status(400).json({ error: 'Missing build_id' });
     }
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
+
+    const payload = globalThis._payloads?.[build_id];
+    if (!payload) {
+      return res.status(404).json({ error: 'No payload found' });
+    }
+
+    return res.status(200).json({ payload });
   }
+
+  res.status(405).json({ error: 'Method not allowed' });
+}
+
+// Read raw body (works on Vercel without bodyParser)
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', chunk => data += chunk);
+    req.on('end', () => resolve(data));
+    req.on('error', err => reject(err));
+  });
 }
