@@ -1,3 +1,9 @@
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
 export default async function handler(req, res) {
   if (req.method === 'POST') {
     try {
@@ -12,7 +18,6 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Missing payload' });
       }
 
-      // TEMP STORAGE (not persistent!)
       globalThis._payloads = globalThis._payloads || {};
       globalThis._payloads[build_id] = payload;
 
@@ -40,7 +45,6 @@ export default async function handler(req, res) {
   res.status(405).json({ error: 'Method not allowed' });
 }
 
-// Read raw body (works on Vercel without bodyParser)
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
